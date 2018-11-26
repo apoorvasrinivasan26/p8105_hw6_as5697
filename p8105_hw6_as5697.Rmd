@@ -5,10 +5,6 @@ date: "11/25/2018"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
 ```{r loading}
 library(tidyverse)
 set.seed(1)
@@ -82,5 +78,38 @@ cities_log %>%
               y = "estimates and CIs"
             ) +
     theme(axis.text = element_text(size = 8))
+```
+
+
+From the plot above, we can see that the adjusted OR in most cities (44 out of 47) of solving homicides comparing non-white to white victims is less than 1. That is, in most cities, homicides with non-white victim are less likely to be solved than those with white victims. Also, cities with higher OR estimate tend to have wider confidence interval. For example, estimates of Durham is less precise than Boston since it's  confidence interval is much higher.
+
+
+###Problem 2
+
+####data loading and tidying
+```{r}
+birthweight = read_csv(url("http://p8105.com/data/birthweight.csv")) %>%
+  mutate(babysex = as.factor(babysex), 
+         babysex = recode_factor(babysex, `1` = "Male", `2` = "Female")) %>%
+  mutate(frace = as.factor(frace), 
+         frace = recode_factor(frace, `1` = "White", `2` = "Black", `3` = "Asian", `4` = "Puerto Rican", `8` = "Other", `9` = "Unknown")) %>%
+ mutate(mrace = as.factor(mrace),
+        mrace = recode_factor(mrace, `1` = "White", `2` = "Black", `3` = "Asian", `4` = "Puerto Rican", `8` = "Other")) %>%
+  mutate(malform = as.factor(malform), 
+         malform = recode_factor(malform, `0` = "Absent", `1` = "Present")) %>%
+  select(bwt, everything())
+  
+###checking if there are missing values
+
+birthweight %>% is.na() %>% sum
+
+##There are no missing values
+
+```
+
+
+
+```{r}
+
 ```
 
