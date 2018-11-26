@@ -9,8 +9,78 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
+```{r loading}
 library(tidyverse)
+set.seed(1)
+homicide = read.csv( file = "./data/homicide-data.csv")
+```
 
+
+###data cleaning
+```{r cleaning}
+homicide= homicide%>%
+  janitor::clean_names()%>%
+  mutate(city_state = str_c(city, ",", state))%>%
+  subset(!city_state %in% c("Dallas,TX","Phoenix,AZ","Kansas City,MO","Tulsa,AL"))%>%
+  mutate(victim_race = ifelse(victim_race != "White", "non-white", "white"))%>%
+  mutate(victim_age = as.numeric(victim_age), victim_race = fct_relevel(victim_race, "white"))
+```
+
+
+
+###Balimore glm
+```{r baltimore}
+Baltimore = filter(homicide, city_state == "Baltimore,MD")%>%
+mutate(resolved = as.numeric(disposition == "Closed by arrest"))%>%
+select(resolved, victim_age, victim_race, victim_sex)
+
+balt_log = 
+  Baltimore %>% 
+  glm(resolved ~ victim_age + victim_race + victim_sex, data = ., family = binomial())%>%
+  broom::tidy()%>%
+  mutate(OR = exp(estimate), conf.low = exp(estimate - qnorm(0.975)*std.error), conf.high = exp(estimate + qnorm(0.975)*std.error))%>%
+  filter(term == "victim_racenon-white")%>%
+  select(term,OR, conf.low,conf.high)
+
+knitr::kable(balt_log)
+```
+
+
+###glm for all the cities 
+```{r allcities}
+
+homicide_subset = homicide %>%
+  filter(victim_race != "unknown") %>% ##removing unknown victim race
+  mutate(resolved = as.numeric(disposition == "Closed by arrest"))
+
+cities_log =
+  homicide_subset %>% 
+  group_by(city_state) %>% 
+  nest() %>% 
+  mutate(models = map(data, ~glm(resolved ~ victim_age + victim_race + victim_sex, data = .x, family = binomial())),
+         models = map(models, broom::tidy)) %>% 
+  select(-data) %>% 
+  unnest() %>%
+  mutate(OR = exp(estimate), conf.low = exp(estimate - qnorm(0.975)*std.error), conf.high = exp(estimate + qnorm(0.975)*std.error)) %>%
+  filter(term == "victim_racenon-white") %>%
+  select(city_state,term,OR, conf.low,conf.high)
+
+knitr::kable(cities_log)
+```
+
+###Visualization
+```{r visualization}
+cities_log %>%
+            mutate(city_state = fct_reorder(city_state, OR))%>%
+            ggplot(aes(x = city_state, y = OR))+
+            geom_point()+
+            geom_errorbar(aes(ymin = conf.low, ymax= conf.high))+
+            theme(axis.text.x =  element_text(angle = 80))+
+            labs(
+              title = "The estimated OR and CIs for solving homicide comparing non-white to white victims across the U.S.",
+              x = "city",
+              y = "estimates and CIs"
+            ) +
+    theme(axis.text = element_text(size = 8))
 ```
 
