@@ -5,12 +5,13 @@ date: "11/25/2018"
 output: html_document
 ---
 
+###Problem 1
+
 ```{r loading}
 library(tidyverse)
 set.seed(1)
 homicide = read.csv( file = "./data/homicide-data.csv")
 ```
-
 
 ###data cleaning
 ```{r cleaning}
@@ -22,7 +23,7 @@ homicide= homicide%>%
   mutate(victim_age = as.numeric(victim_age), victim_race = fct_relevel(victim_race, "white"))
 ```
 
-
+After data cleaning, the tidy dataset consists `r nrow(homicide)` rows by `r ncol(homicide)` columns.
 
 ###Balimore glm
 ```{r baltimore}
@@ -41,6 +42,7 @@ balt_log =
 knitr::kable(balt_log)
 ```
 
+The adjusted odds ratio of solved homicides in Baltimore, MD which the victim race is non-white is 0.441 times the adjusted odds ratio of solved homicides when the victim race is white. 95% CI is between 0.312 and 0.62.
 
 ###glm for all the cities 
 ```{r allcities}
@@ -86,7 +88,7 @@ From the plot above, we can see that the adjusted OR in most cities (44 out of 4
 
 ###Problem 2
 
-```{r}
+```{r_initial}
 library(broom)
 library(leaps)
 library(HH)
@@ -96,7 +98,7 @@ library(mgcv)
 
 
 ####data loading and tidying
-```{r}
+```{r_tidy}
 birthweight = read_csv("./data/birthweight.csv") %>%
   mutate(babysex = as.factor(babysex), 
          babysex = recode_factor(babysex, `1` = "Male", `2` = "Female")) %>%
@@ -117,7 +119,7 @@ birthweight %>% is.na() %>% sum
 
 Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two. Describe your modeling process and show a plot of model residuals against fitted values – use add_predictions and add_residuals in making this plot.
 
-```{r}
+```{r_visual}
 
 ###Visualization
 birthweight %>% 
@@ -131,7 +133,7 @@ The birthweight from the above graph is normally distributed
 To build a model for birthweight, we will use backward elimication i.e start with all the predictors in stepwise/automatic approach to identify best subsets.
 
 
-```{r}
+```{r_aic}
 mult_fit = lm(bwt ~ ., data=birthweight) 
 step(mult_fit, direction='backward') %>% 
   broom::tidy() 
@@ -147,14 +149,14 @@ bwt ~ babysex + bhead + blength + delwt + fincome + gaweeks +
 with smallest AIC of 48705.38
 
 Hence, my model is 
-```{r}
+```{r_mymodel}
 my_model = lm(bwt ~ babysex + bhead + blength + delwt + fincome +  gaweeks + mheight + parity + ppwt + smoken + mrace, data = birthweight)
 summary(my_model)
 ```
 
 
 Plotting my model residuals against fitted values 
-```{r}
+```{r_plot}
 birthweight %>% 
   add_predictions(my_model) %>% 
   add_residuals(my_model) %>% 
@@ -175,7 +177,7 @@ __model_3__ : using head circumference, length, sex, and all interactions (inclu
 
 __bwt ~ babysex + bhead + blength + babysex*bhead + babysex*blength + bhead*blength + babysex*bhead*blength__
 
-```{r}
+```{r_selectingmodel}
 model_2 = lm(bwt ~ blength + gaweeks, data = birthweight)
 model_3 = lm(bwt ~ babysex + bhead + blength + babysex*bhead + babysex*blength + bhead*blength + babysex*bhead*blength , data = birthweight)
 
@@ -194,7 +196,7 @@ My model has the highest R squared from the table above.
 
 Comparing in terms of the cross-validated prediction error
 
-```{r}
+```{r_cv}
 cross_validation = 
   crossv_mc(birthweight, 1000) %>%
   mutate(train = map(train, as_tibble),
@@ -208,7 +210,7 @@ cross_validation =
 ```
 
 
-```{r}
+```{r_rmseplot}
 cross_validation %>% 
   dplyr::select(starts_with("rmse")) %>% 
   gather(key = model, value = rmse) %>% 
