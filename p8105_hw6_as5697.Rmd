@@ -16,7 +16,7 @@ homicide = read.csv( file = "./data/homicide-data.csv")
 ```{r cleaning}
 homicide= homicide%>%
   janitor::clean_names()%>%
-  mutate(city_state = str_c(city, ",", state))%>%
+  mutate(city_state = str_c(city, ",", state)) %>%
   subset(!city_state %in% c("Dallas,TX","Phoenix,AZ","Kansas City,MO","Tulsa,AL"))%>%
   mutate(victim_race = ifelse(victim_race != "White", "non-white", "white"))%>%
   mutate(victim_age = as.numeric(victim_age), victim_race = fct_relevel(victim_race, "white"))
@@ -26,8 +26,8 @@ homicide= homicide%>%
 
 ###Balimore glm
 ```{r baltimore}
-Baltimore = filter(homicide, city_state == "Baltimore,MD")%>%
-mutate(resolved = as.numeric(disposition == "Closed by arrest"))%>%
+Baltimore = filter(homicide, city_state == "Baltimore,MD") %>%
+mutate(resolved = as.numeric(disposition == "Closed by arrest")) %>%
 select(resolved, victim_age, victim_race, victim_sex)
 
 balt_log = 
@@ -86,9 +86,18 @@ From the plot above, we can see that the adjusted OR in most cities (44 out of 4
 
 ###Problem 2
 
+```{r}
+library(broom)
+library(leaps)
+library(HH)
+library(modelr)
+library(mgcv)
+```
+
+
 ####data loading and tidying
 ```{r}
-birthweight = read_csv(url("http://p8105.com/data/birthweight.csv")) %>%
+birthweight = read_csv("./data/birthweight.csv") %>%
   mutate(babysex = as.factor(babysex), 
          babysex = recode_factor(babysex, `1` = "Male", `2` = "Female")) %>%
   mutate(frace = as.factor(frace), 
@@ -96,8 +105,7 @@ birthweight = read_csv(url("http://p8105.com/data/birthweight.csv")) %>%
  mutate(mrace = as.factor(mrace),
         mrace = recode_factor(mrace, `1` = "White", `2` = "Black", `3` = "Asian", `4` = "Puerto Rican", `8` = "Other")) %>%
   mutate(malform = as.factor(malform), 
-         malform = recode_factor(malform, `0` = "Absent", `1` = "Present")) %>%
-  select(bwt, everything())
+         malform = recode_factor(malform, `0` = "Absent", `1` = "Present")) 
   
 ###checking if there are missing values
 
@@ -107,9 +115,108 @@ birthweight %>% is.na() %>% sum
 
 ```
 
-
+Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two. Describe your modeling process and show a plot of model residuals against fitted values – use add_predictions and add_residuals in making this plot.
 
 ```{r}
 
+###Visualization
+birthweight %>% 
+  ggplot(aes(x=bwt))+
+  geom_histogram()+
+  labs(title="Distribution Of Childrens' Birth Weight")
 ```
+
+The birthweight from the above graph is normally distributed
+
+To build a model for birthweight, we will use backward elimication i.e start with all the predictors in stepwise/automatic approach to identify best subsets.
+
+
+```{r}
+mult_fit = lm(bwt ~ ., data=birthweight) 
+step(mult_fit, direction='backward') %>% 
+  broom::tidy() 
+```
+
+Given a collection of models for the data, AIC estimates the quality of each model, relative to each of the other models. We need to choose the model with smallest AIC.
+
+
+The desired model is:
+bwt ~ babysex + bhead + blength + delwt + fincome + gaweeks + 
+    mheight + mrace + parity + ppwt + smoken
+
+with smallest AIC of 48705.38
+
+Hence, my model is 
+```{r}
+my_model = lm(bwt ~ babysex + bhead + blength + delwt + fincome +  gaweeks + mheight + parity + ppwt + smoken + mrace, data = birthweight)
+summary(my_model)
+```
+
+
+Plotting my model residuals against fitted values 
+```{r}
+birthweight %>% 
+  add_predictions(my_model) %>% 
+  add_residuals(my_model) %>% 
+  ggplot(aes(x = pred, y = resid)) + 
+  geom_point() + 
+  geom_smooth() + 
+  labs(title = "Model Residuals Against Fitted Values",
+        x = "Predictions",
+        y = "Residuals")
+```
+
+Comparing my model with two other suggested models:
+__model_2__: using length at birth and gestational age as predictors (main effects only)
+
+__bwt ~ blength + gaweeks__
+
+__model_3__ : using head circumference, length, sex, and all interactions (including the three-way interaction) between these.
+
+__bwt ~ babysex + bhead + blength + babysex*bhead + babysex*blength + bhead*blength + babysex*bhead*blength__
+
+```{r}
+model_2 = lm(bwt ~ blength + gaweeks, data = birthweight)
+model_3 = lm(bwt ~ babysex + bhead + blength + babysex*bhead + babysex*blength + bhead*blength + babysex*bhead*blength , data = birthweight)
+
+
+sum1=summary(my_model)$adj.r.squared
+sum2=summary(model_2)$adj.r.squared
+sum3=summary(model_3)$adj.r.squared
+adj_r_squared<- matrix(c(sum1,sum2,sum3),ncol=1,byrow=TRUE)
+colnames(adj_r_squared) = c("Adjusted R-squared")
+rownames(adj_r_squared) = c("my_model","model_2","model_3")
+adj_r_squared<- as.table(adj_r_squared)
+adj_r_squared
+```
+
+My model has the highest R squared from the table above.
+
+Comparing in terms of the cross-validated prediction error
+
+```{r}
+cross_validation = 
+  crossv_mc(birthweight, 1000) %>%
+  mutate(train = map(train, as_tibble),
+         test = map(test, as_tibble)) %>% 
+  mutate(my_model = map(train, ~lm(bwt ~ babysex + bhead + blength + delwt + fincome +  gaweeks + mheight + parity + ppwt + smoken + mrace, data = birthweight)),
+         model_2 = map(train, ~lm(bwt ~ blength + gaweeks, data = birthweight)),
+         model_3 = map(train, ~lm(bwt ~ babysex + bhead + blength + babysex*bhead + babysex*blength + bhead*blength + babysex*bhead*blength , data = birthweight)),
+         rmse_1 = map2_dbl(my_model, test, ~rmse(model = .x, data = .y)),
+         rmse_2 = map2_dbl(model_2, test, ~rmse(model = .x, data = .y)),
+         rmse_3 = map2_dbl(model_3, test, ~rmse(model = .x, data = .y)))
+```
+
+
+```{r}
+cross_validation %>% 
+  dplyr::select(starts_with("rmse")) %>% 
+  gather(key = model, value = rmse) %>% 
+  mutate(model = str_replace(model, "rmse_", ""),
+         model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) + geom_violin() + 
+  labs(title="RMSE Comparisons Among Three Models")
+```
+
+According to the violin plot above,the first model has lowest RMSE  among the three. Low RMSE indicates that a model  has small differences between predicted values and obseved values.Therefore, I'd pick the first model over the other two.
 
